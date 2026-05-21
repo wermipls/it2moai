@@ -43,9 +43,7 @@ import json
 import math
 
 def die(msg):
-    if isinstance(msg, BaseException):
-        msg = str(msg)
-    stderr.write(str(msg) + '\n')
+    print(msg, file=stderr)
     exit(1)
 
 
