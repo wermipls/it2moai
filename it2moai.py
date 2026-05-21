@@ -80,54 +80,54 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
                 continue
             pattern_data = module["patterns"][pattern_number][0]
             for row in pattern_data:
-                channel_amount = len(row)
-                if channel_amount > 0:
-                    for channel in row:
-                        channel_amount = channel_amount - 1
-                        note = channel.get("note")
-                        # Skip notes that don't exist
-                        if not note:
-                            continue
-                        try:
-                            cur_vol = math.floor(channel['volpan']/64*100) # change note volume setting to a floored percentage
-                        except:
-                            cur_vol = 100
-                        if note == 254:
-                            outfile.write('!cut|')
-                        else:
-                            instrument = channel["instrument"]
-                            sample = soundnamelist[instrument-1] # write to the correct instrument as mapped in the soundlist
-                            pitch = note-60+tuninglist[instrument-1] # adjust pitch with the offset from the soundlist
-                            # if user wants regular tuning, this is skipped, otherwise, the notes are remapped to the new EDO
-                            if (edo!=12.0):
-                                ratio=12/edo
-                                pitch=((pitch-origin_note)*ratio)+origin_note
-                            # Checking for Fine/Extra Fine Portamento Down/Up commands (EFx, FFx, EEx, FEx)
-                            # Applies a pitch offset (detune) to rows containing both a note and one of these commands
-                            # Note that trying to use these commands in a row without a note will break the script
-                            if ('command' in channel):
-                                if ("EF" in channel["command"]) or ("FF" in channel["command"]) or ("EE" in channel["command"]) or ("FE" in channel["command"]):
-                                    cmd = channel["command"]
-                                    pitchoffset = int(cmd[2],16) * 0.0625
-                                    if (cmd[0]=='F'): pitchoffset = pitchoffset * -1
-                                    if (cmd[1]=='E'): pitchoffset = pitchoffset / 4
-                                    pitch = pitch - pitchoffset
-                            # If the note is at default sample pitch offset of 0, don't bother writing pitch (for cleaner json)
-                            # If the note volume is set to 100%, don't bother writing (for cleaner json + improved readability of volume settings in UI)
-                            if (cur_vol==100):
-                                if (pitch==0):
-                                    outfile.write(sample + '|')
-                                else:
-                                    outfile.write(sample + '@' + str(pitch) + '|')
+                note_written = False
+                for channel in row:
+                    note = channel.get("note")
+                    # Skip notes that don't exist
+                    if not note:
+                        continue
+                    try:
+                        cur_vol = math.floor(channel['volpan']/64*100) # change note volume setting to a floored percentage
+                    except:
+                        cur_vol = 100
+                    if note == 254:
+                        outfile.write('!cut|')
+                    else:
+                        if note_written:
+                            outfile.write('!combine|')
+
+                        instrument = channel["instrument"]
+                        sample = soundnamelist[instrument-1] # write to the correct instrument as mapped in the soundlist
+                        pitch = note-60+tuninglist[instrument-1] # adjust pitch with the offset from the soundlist
+                        # if user wants regular tuning, this is skipped, otherwise, the notes are remapped to the new EDO
+                        if (edo!=12.0):
+                            ratio=12/edo
+                            pitch=((pitch-origin_note)*ratio)+origin_note
+                        # Checking for Fine/Extra Fine Portamento Down/Up commands (EFx, FFx, EEx, FEx)
+                        # Applies a pitch offset (detune) to rows containing both a note and one of these commands
+                        # Note that trying to use these commands in a row without a note will break the script
+                        if ('command' in channel):
+                            if ("EF" in channel["command"]) or ("FF" in channel["command"]) or ("EE" in channel["command"]) or ("FE" in channel["command"]):
+                                cmd = channel["command"]
+                                pitchoffset = int(cmd[2],16) * 0.0625
+                                if (cmd[0]=='F'): pitchoffset = pitchoffset * -1
+                                if (cmd[1]=='E'): pitchoffset = pitchoffset / 4
+                                pitch = pitch - pitchoffset
+                        # If the note is at default sample pitch offset of 0, don't bother writing pitch (for cleaner json)
+                        # If the note volume is set to 100%, don't bother writing (for cleaner json + improved readability of volume settings in UI)
+                        if (cur_vol==100):
+                            if (pitch==0):
+                                outfile.write(sample + '|')
                             else:
-                                if (pitch==0):
-                                    outfile.write(sample + "%" + str(cur_vol) + '|')
-                                else:
-                                    outfile.write(sample + '@' + str(pitch) + "%" + str(cur_vol) + '|')
-                                
-                            if channel_amount > 0:
-                                outfile.write('!combine|')
-                else:
+                                outfile.write(sample + '@' + str(pitch) + '|')
+                        else:
+                            if (pitch==0):
+                                outfile.write(sample + "%" + str(cur_vol) + '|')
+                            else:
+                                outfile.write(sample + '@' + str(pitch) + "%" + str(cur_vol) + '|')
+                        note_written = True
+
+                if not note_written:
                     outfile.write('_pause|')
 
     outfile.close()
