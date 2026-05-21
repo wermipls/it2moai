@@ -81,6 +81,7 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
             pattern_data = module["patterns"][pattern_number][0]
             for row in pattern_data:
                 note_written = False
+                cut_written = False
                 for channel in row:
                     note = channel.get("note")
                     # Skip notes that don't exist
@@ -91,7 +92,9 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
                     except:
                         cur_vol = 100
                     if note == 254:
-                        outfile.write('!cut|')
+                        if not cut_written:
+                            outfile.write('!cut|')
+                            cut_written = True
                     else:
                         if note_written:
                             outfile.write('!combine|')
