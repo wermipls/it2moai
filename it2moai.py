@@ -36,7 +36,8 @@ Version history
 * 0.5: Fixed errors on non-existent patterns and notes
 """
 
-from sys import stderr, version_info
+from argparse import ArgumentParser
+from sys import stderr, version_info, argv
 from pytrax import impulsetracker
 import json
 import math
@@ -51,28 +52,6 @@ def die(msg):
 if version_info.major < 3:
     die('python3 only!')
 
-
-MODULE = input("Enter module name, .it or .mptm file format included: ")
-try:
-    open(file=MODULE, mode='r')
-except:
-    die('file not found!')
-
-try:    
-    EDO = float(input("Enter desired 'number of equal divisions of the octave': "))
-except:
-    die('invalid number!')
-
-ORIGIN_NOTE = 0
-if EDO!=12:
-    try:
-        ORIGIN_NOTE = float(input("Enter central semitone to remap all the notes around: "))
-    except:
-        die('invalid number!')
-        
-SOUNDLIST = "soundlist.json"
-
-
 def get_soundlist(soundlist_file):
     file = open(file=soundlist_file, encoding="utf8")
     soundlist = json.load(file)
@@ -86,11 +65,8 @@ def get_soundlist(soundlist_file):
         tuningoffsetlist.append(x["tuningoffset"]) 
     return soundnamelist,tuningoffsetlist
 
-def convert(module, filename, soundnamelist, tuninglist):
-    try:
-        outfile = open(filename, 'w', encoding="utf8")
-    except BaseException as ex:
-        die(ex)
+def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note = 0):
+    outfile = open(filename, 'w', encoding="utf8")
 
     inittempo = (module["inittempo"])*8
     initvol = math.floor((module["globvol"])/128*100) # change global volume to a percentage
@@ -125,9 +101,9 @@ def convert(module, filename, soundnamelist, tuninglist):
                             sample = soundnamelist[instrument-1] # write to the correct instrument as mapped in the soundlist
                             pitch = note-60+tuninglist[instrument-1] # adjust pitch with the offset from the soundlist
                             # if user wants regular tuning, this is skipped, otherwise, the notes are remapped to the new EDO
-                            if (EDO!=12.0):
-                                ratio=12/EDO
-                                pitch=((pitch-ORIGIN_NOTE)*ratio)+ORIGIN_NOTE
+                            if (edo!=12.0):
+                                ratio=12/edo
+                                pitch=((pitch-origin_note)*ratio)+origin_note
                             # Checking for Fine/Extra Fine Portamento Down/Up commands (EFx, FFx, EEx, FEx)
                             # Applies a pitch offset (detune) to rows containing both a note and one of these commands
                             # Note that trying to use these commands in a row without a note will break the script
@@ -158,7 +134,42 @@ def convert(module, filename, soundnamelist, tuninglist):
 
     outfile.close()
 
+if __name__ == '__main__':
+    output_path = None
 
-module = impulsetracker.parse_file(MODULE, with_patterns=True)
-soundnamelist,tuninglist = get_soundlist(SOUNDLIST)
-convert(module, 'output.🗿', soundnamelist, tuninglist)
+    if len(argv) > 1:
+        argparser = ArgumentParser()
+        argparser.add_argument("input", help="input module (.it or .mptm supported)")
+        argparser.add_argument("--output", help="output .🗿 file path, defaults to input filename with moai extension")
+        argparser.add_argument("--edo", type=float, default=12, help="equal divisions of the octave, default is 12")
+        argparser.add_argument("--origin-note", type=float, help="central semitone to remap all notes around, required if EDO is other than 12")
+
+        args = argparser.parse_args()
+
+        input_path  = args.input
+        edo = args.edo
+        origin_note = args.origin_note
+        output_path = args.output
+        if edo != 12 and not origin_note:
+            die('origin note must be specified when EDO is not 12')
+    else:
+        try:
+            input_path = input("Enter module name, .it or .mptm file format included: ")
+            edo = float(input("Enter desired 'number of equal divisions of the octave': "))
+            if edo!=12:
+                origin_note = float(input("Enter central semitone to remap all the notes around: "))
+        except BaseException as ex:
+            die(ex)
+
+    if not output_path:
+        if input_path.casefold().endswith('.it'):
+            output_path = input_path[:-3] + '.🗿'
+        elif input_path.casefold().endswith('.mptm'):
+            output_path = input_path[:-5] + '.🗿'
+        else:
+            output_path = input_path + '.🗿'
+
+    module = impulsetracker.parse_file(input_path, with_patterns=True)
+    soundnamelist,tuninglist = get_soundlist("soundlist.json")
+    convert(module, output_path, soundnamelist, tuninglist, edo, origin_note)
+    print(f"Output written to '{output_path}'", file=stderr)
