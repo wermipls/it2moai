@@ -66,12 +66,13 @@ def get_soundlist(soundlist_file):
 def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note = 0):
     outfile = open(filename, 'w', encoding="utf8")
 
-    inittempo = (module["inittempo"])*8
-    initvol = (module["globvol"])/128*100 # change global volume to a percentage
+    tempo = module['inittempo']
+    speed = module['initspeed']
+    global_volume = module["globvol"]
     sequence = module["orders"]
 
-    outfile.write('!speed@{}|'.format(inittempo))
-    outfile.write('!volume@{}|'.format(initvol))    
+    outfile.write(f'!speed@{tempo / (speed / 6) * 4}|')
+    outfile.write(f'!volume@{global_volume / 128 * 100}|')
 
     channel_state = []
     for i in range(127):
@@ -85,7 +86,41 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
             continue
         pattern_data = module["patterns"][pattern_number][0]
 
+
         for row in pattern_data:
+            # we need to handle tempo/global volume changes before writing notes.
+            tempo_speed_changed = False
+            global_volume_changed = False
+            for channel in row:
+                cmd = channel.get('command')
+                if not cmd:
+                    continue
+                elif cmd[0] == 'A': # set speed
+                    speed = int(cmd[1], 16) * 16 + int(cmd[2], 16)
+                    tempo_speed_changed = True
+                elif cmd[0] == 'T': # set tempo
+                    xx = int(cmd[1], 16) * 16 + int(cmd[2], 16)
+                    if xx > 0x20:
+                        tempo = xx
+                        tempo_speed_changed = True
+                elif cmd[0] == 'V': # set global volume
+                    xx = int(cmd[1], 16) * 16 + int(cmd[2], 16)
+                    if xx <= 128:
+                        global_volume = xx
+                        global_volume_changed = True
+                elif cmd[0] == 'W': # global volume slide
+                    if cmd[1] == 'F' and cmd[2] != 'F' and cmd[2] != '0':
+                        global_volume = max(0, global_volume - int(cmd[2], 16))
+                        global_volume_changed = True
+                    if cmd[2] == 'F' and cmd[1] != 'F' and cmd[1] != '0':
+                        global_volume = min(128, global_volume + int(cmd[1], 16))
+                        global_volume_changed = True
+
+            if global_volume_changed:
+                outfile.write(f'!volume@{global_volume / 128 * 100}|')
+            if tempo_speed_changed:
+                outfile.write(f'!speed@{tempo / (speed / 6) * 4}|')
+
             note_written = False
             cut_written = False
             for channel in row:
