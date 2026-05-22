@@ -40,7 +40,6 @@ from argparse import ArgumentParser
 from sys import stderr, version_info, argv
 from pytrax import impulsetracker
 import json
-import math
 
 def die(msg):
     print(msg, file=stderr)
