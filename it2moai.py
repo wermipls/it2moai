@@ -67,11 +67,15 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
     outfile = open(filename, 'w', encoding="utf8")
 
     inittempo = (module["inittempo"])*8
-    initvol = math.floor((module["globvol"])/128*100) # change global volume to a percentage
+    initvol = (module["globvol"])/128*100 # change global volume to a percentage
     sequence = module["orders"]
 
     outfile.write('!speed@{}|'.format(inittempo))
     outfile.write('!volume@{}|'.format(initvol))    
+
+    channel_state = []
+    for i in range(127):
+        channel_state.append({'pan': 32})
 
     for pattern_number in sequence:
         if pattern_number == 255:
@@ -80,26 +84,44 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
         if len(module["patterns"]) < pattern_number or len(module["patterns"][pattern_number]) < 1:
             continue
         pattern_data = module["patterns"][pattern_number][0]
+
         for row in pattern_data:
             note_written = False
             cut_written = False
             for channel in row:
+                state = channel_state[channel['channel']]
                 note = channel.get("note")
+                instrument = channel.get("instrument")
+                volpan = channel.get("volpan")
+
+                if note:
+                    state['note'] = note
+
+                if instrument:
+                    state['instrument'] = instrument
+                    state['volume'] = 64 # technically sample default, but the templates all use 64 anyway.
+                    # "set pan" sample option unhandled, but we assume the instruments/samples are not modified.
+                    if not note: # bare instrument set should cause a retrigger of a previous note.
+                        note = state.get('note')
+                else:
+                    instrument = state.get('instrument')
+
+                if volpan:
+                    if volpan <= 64:
+                        state['volume'] = volpan
+                    elif volpan >= 128 and volpan <= 192:
+                        state['pan'] = volpan - 128
+
                 # Skip notes that don't exist
                 if not note:
                     continue
-                try:
-                    cur_vol = math.floor(channel['volpan']/64*100) # change note volume setting to a floored percentage
-                except:
-                    cur_vol = 100
-                if note == 254:
+                elif note == 254:
                     if not cut_written:
                         outfile.write('!cut|')
                         cut_written = True
-                else:
+                elif instrument:
                     if note_written:
                         outfile.write('!combine|')
-                    instrument = channel["instrument"]
                     sample = soundnamelist[instrument-1] # write to the correct instrument as mapped in the soundlist
                     pitch = note-60+tuninglist[instrument-1] # adjust pitch with the offset from the soundlist
                     # if user wants regular tuning, this is skipped, otherwise, the notes are remapped to the new EDO
@@ -116,74 +138,20 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
                             if (cmd[0]=='F'): pitchoffset = pitchoffset * -1
                             if (cmd[1]=='E'): pitchoffset = pitchoffset / 4
                             pitch = pitch - pitchoffset
-                    # If the note is at default sample pitch offset of 0, don't bother writing pitch (for cleaner json)
-                    # If the note volume is set to 100%, don't bother writing (for cleaner json + improved readability of volume settings in UI)
-                    if (cur_vol==100):
-                        if (pitch==0):
-                            outfile.write(sample + '|')
-                        else:
-                            outfile.write(sample + '@' + str(pitch) + '|')
-                    else:
-                        if (pitch==0):
-                            outfile.write(sample + "%" + str(cur_vol) + '|')
-                        else:
-                            outfile.write(sample + '@' + str(pitch) + "%" + str(cur_vol) + '|')
-                    note_written = True
-        if pattern_number != 255:
-            # Skip patterns that don't exist
-            if len(module["patterns"]) < pattern_number or len(module["patterns"][pattern_number]) < 1:
-                continue
-            pattern_data = module["patterns"][pattern_number][0]
-            for row in pattern_data:
-                note_written = False
-                cut_written = False
-                for channel in row:
-                    note = channel.get("note")
-                    # Skip notes that don't exist
-                    if not note:
-                        continue
-                    try:
-                        cur_vol = math.floor(channel['volpan']/64*100) # change note volume setting to a floored percentage
-                    except:
-                        cur_vol = 100
-                    if note == 254:
-                        if not cut_written:
-                            outfile.write('!cut|')
-                            cut_written = True
-                    else:
-                        if note_written:
-                            outfile.write('!combine|')
 
-                        instrument = channel["instrument"]
-                        sample = soundnamelist[instrument-1] # write to the correct instrument as mapped in the soundlist
-                        pitch = note-60+tuninglist[instrument-1] # adjust pitch with the offset from the soundlist
-                        # if user wants regular tuning, this is skipped, otherwise, the notes are remapped to the new EDO
-                        if (edo!=12.0):
-                            ratio=12/edo
-                            pitch=((pitch-origin_note)*ratio)+origin_note
-                        # Checking for Fine/Extra Fine Portamento Down/Up commands (EFx, FFx, EEx, FEx)
-                        # Applies a pitch offset (detune) to rows containing both a note and one of these commands
-                        # Note that trying to use these commands in a row without a note will break the script
-                        if ('command' in channel):
-                            if ("EF" in channel["command"]) or ("FF" in channel["command"]) or ("EE" in channel["command"]) or ("FE" in channel["command"]):
-                                cmd = channel["command"]
-                                pitchoffset = int(cmd[2],16) * 0.0625
-                                if (cmd[0]=='F'): pitchoffset = pitchoffset * -1
-                                if (cmd[1]=='E'): pitchoffset = pitchoffset / 4
-                                pitch = pitch - pitchoffset
-                        # If the note is at default sample pitch offset of 0, don't bother writing pitch (for cleaner json)
-                        # If the note volume is set to 100%, don't bother writing (for cleaner json + improved readability of volume settings in UI)
-                        if (cur_vol==100):
-                            if (pitch==0):
-                                outfile.write(sample + '|')
-                            else:
-                                outfile.write(sample + '@' + str(pitch) + '|')
-                        else:
-                            if (pitch==0):
-                                outfile.write(sample + "%" + str(cur_vol) + '|')
-                            else:
-                                outfile.write(sample + '@' + str(pitch) + "%" + str(cur_vol) + '|')
-                        note_written = True
+                    cur_vol = state['volume'] / 64 * 100
+                    cur_pan = (state['pan'] - 32) / 32 * 100
+
+                    outfile.write(sample)
+                    # don't bother writing parameters if they are at their default values.
+                    if pitch != 0:
+                        outfile.write(f'@{pitch}')
+                    if cur_vol != 100:
+                        outfile.write(f'%{cur_vol}')
+                    if cur_pan != 0:
+                        outfile.write(f'^{cur_pan}')
+                    outfile.write('|')
+                    note_written = True
 
             if not note_written:
                 outfile.write('_pause|')
@@ -192,6 +160,7 @@ def convert(module, filename, soundnamelist, tuninglist, edo = 12, origin_note =
 
 if __name__ == '__main__':
     output_path = None
+    origin_note = None
 
     if len(argv) > 1:
         argparser = ArgumentParser()
