@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
 
 """
-it2moai.py, version 0.3
-----------------------
+it2moai, version 0.6
+====================
 
 Python 3 only.
 
-Use the example.it or .mptm file to do your song. When done, run this 
-script and it will generate an output.moai file usable by 
-thirtydollar.website.
+Use the example.it or example.mptm file to do your song. When done, run the script to
+generate a .🗿 file usable on thirtydollar.website.
 
 Don't change the samples/instruments (.mptm instrument Alternative Tuning may be changed).
-Only notes and volume settings are parsed. Commands are not parsed except for EFx/FFx/EEx/EFx in rows containing notes (for detuning)
-Note Cuts ^ will cut all sounds, no matter where they are placed (i.e., be careful with these)
 
-Initial settings:
-Initial Tempo: adjustable
-Ticks/Row: 3 (fixed, do not change)
-Initial Global Vol: adjustable (template set at 60)
-Sample Volume: 160 (this may be adjusted but does not affect the output, it is set so that tracker output during playback sounds closer to Moai website output)
+Tempo, Ticks/Row and Global Volume are adjustable. Sample Volume does not do anything
+(set to 160 by default so that tracker playback sounds closer to Moai website).
+
+Note volume and pan are supported via the volume column. Pan changes are sticky.
+Note Cuts ^ will cut all sounds, no matter where they are placed (i.e., be careful with these).
+
+Supported commands:
+* Set Speed (Axx)
+* Set Tempo (Txx for xx greater than or equal to 32)
+* Fine Portamento (EFx/FFx) and Extra Fine Portamento (EEx/EEx) - only for note triggers
+* Set Global Volume (Vxx)
+* Fine Global Volume Slide (WFx/WxF)
 
 Version history
 ---------------
@@ -34,6 +38,12 @@ Version history
 * 0.4: Support added for Fine/Extra Fine Portamento Down/Up commands (EFx/FFx/EEx/FEx) to detune notes.
        Use only on rows that also contain a note, otherwise the script will break.
 * 0.5: Fixed errors on non-existent patterns and notes
+* 0.6: Example modules updated with NNA set to Continue.
+       Output file is now placed next to input module by default. Added command line parsing.
+       Added support for arbitrary ticks/row, panning, new commands (Axx, Txx, Vxx, WFx/WxF).
+       Converter edge case improvements: fixed timing of rows with cuts/effects but no notes,
+       fixed handling of notes without an instrument and instrument changes without a note.
+       Volume changes are emitted as floating point now.
 """
 
 from argparse import ArgumentParser
